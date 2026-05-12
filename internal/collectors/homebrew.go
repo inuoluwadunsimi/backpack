@@ -1,28 +1,45 @@
 package collectors
 
 import (
+	"context"
+
+	"github.com/inuoluwadunsimi/backpack/internal/exec"
 	"github.com/inuoluwadunsimi/backpack/internal/snapshot"
-	"github.com/inuoluwadunsimi/backpack/internal/storage"
 )
 
 // HomebrewCollector captures Homebrew formulae, casks, and taps.
-type HomebrewCollector struct{}
+type HomebrewCollector struct {
+	runner exec.Runner
+}
+
+func NewHomebrewCollector(runner exec.Runner) *HomebrewCollector {
+	return &HomebrewCollector{runner: runner}
+}
 
 func (h *HomebrewCollector) Name() string { return "homebrew" }
 
-func (h *HomebrewCollector) IsAvailable() bool {
-	// TODO: check if `brew` is in PATH
-	return false
+func (h *HomebrewCollector) Available() bool {
+	_, ok := h.runner.Which("brew")
+	return ok
 }
 
-func (h *HomebrewCollector) Collect(manifest *snapshot.ToolsManifest, _ storage.BlobStore) error {
+func (h *HomebrewCollector) Collect(ctx context.Context) (*CollectorResult, error) {
+	var warnings []string
+
 	// TODO: run `brew --version` to get version
 	// TODO: run `brew list --formula --versions` and `brew list --cask --versions`
+	//       → parse into []HomebrewPackage with Type "formula"/"cask"
 	// TODO: run `brew tap` to get taps
 	// TODO: run `brew list --pinned` to detect pinned formulae
-	manifest.Homebrew = &snapshot.HomebrewState{
+
+	state := &snapshot.HomebrewState{
 		Packages: []snapshot.HomebrewPackage{},
 		Taps:     []string{},
 	}
-	return nil
+
+	return &CollectorResult{
+		Available: true,
+		Data:      state,
+		Warnings:  warnings,
+	}, nil
 }

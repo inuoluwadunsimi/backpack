@@ -1,25 +1,49 @@
 package collectors
 
 import (
+	"context"
+
+	"github.com/inuoluwadunsimi/backpack/internal/exec"
 	"github.com/inuoluwadunsimi/backpack/internal/snapshot"
-	"github.com/inuoluwadunsimi/backpack/internal/storage"
 )
 
 // PipCollector captures globally installed pip/pip3 packages and the Python runtime.
-type PipCollector struct{}
+type PipCollector struct {
+	runner exec.Runner
+}
+
+func NewPipCollector(runner exec.Runner) *PipCollector {
+	return &PipCollector{runner: runner}
+}
 
 func (p *PipCollector) Name() string { return "pip" }
 
-func (p *PipCollector) IsAvailable() bool {
-	// TODO: check if `pip3` is in PATH
-	return false
+func (p *PipCollector) Available() bool {
+	_, ok := p.runner.Which("pip3")
+	return ok
 }
 
-func (p *PipCollector) Collect(manifest *snapshot.ToolsManifest, _ storage.BlobStore) error {
+// PipCollectorData bundles python runtime and global packages.
+type PipCollectorData struct {
+	Python      *snapshot.RuntimeState
+	PipPackages []snapshot.PackageEntry
+}
+
+func (p *PipCollector) Collect(ctx context.Context) (*CollectorResult, error) {
+	var warnings []string
+
 	// TODO: run `python3 --version` to get runtime version
 	// TODO: detect manager (pyenv, system)
 	// TODO: run `pip3 list --format=json`
-	manifest.Python = &snapshot.RuntimeState{}
-	manifest.PipPackages = []snapshot.PackageEntry{}
-	return nil
+
+	data := &PipCollectorData{
+		Python:      &snapshot.RuntimeState{},
+		PipPackages: []snapshot.PackageEntry{},
+	}
+
+	return &CollectorResult{
+		Available: true,
+		Data:      data,
+		Warnings:  warnings,
+	}, nil
 }
