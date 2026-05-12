@@ -4,9 +4,15 @@ import "github.com/inuoluwadunsimi/backpack/internal/snapshot"
 
 // S3Backend stores snapshots in an AWS S3 bucket.
 type S3Backend struct {
-	Bucket string
-	Region string
-	Prefix string
+	Bucket    string
+	Region    string
+	Prefix    string
+	Profile   string
+	blobStore *LocalBlobStore
+}
+
+func (s *S3Backend) Blobs() BlobStore {
+	return s.blobStore
 }
 
 func (s *S3Backend) SaveSnapshot(snap *snapshot.Snapshot) error {

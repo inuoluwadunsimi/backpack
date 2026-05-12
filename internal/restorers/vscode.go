@@ -6,8 +6,11 @@ type VSCodeRestorer struct{}
 
 func (v *VSCodeRestorer) Name() string { return "vscode" }
 
-func (v *VSCodeRestorer) Restore(state *snapshot.ToolState, dryRun bool) error {
-	// TODO: code --install-extension <ext> for each extension
-	// TODO: restore settings.json and keybindings.json
+func (v *VSCodeRestorer) Restore(manifest *snapshot.ToolsManifest, dryRun bool) error {
+	if manifest.VSCode == nil {
+		return nil
+	}
+	// TODO: code --install-extension <ext.ID> for each extension
+	// TODO: restore settings.json and keybindings.json from blob store
 	return nil
 }

@@ -1,6 +1,9 @@
 package collectors
 
-import "github.com/inuoluwadunsimi/backpack/internal/snapshot"
+import (
+	"github.com/inuoluwadunsimi/backpack/internal/snapshot"
+	"github.com/inuoluwadunsimi/backpack/internal/storage"
+)
 
 // HomebrewCollector captures Homebrew formulae, casks, and taps.
 type HomebrewCollector struct{}
@@ -12,7 +15,14 @@ func (h *HomebrewCollector) IsAvailable() bool {
 	return false
 }
 
-func (h *HomebrewCollector) Collect() (*snapshot.ToolState, error) {
-	// TODO: run `brew list --formula --versions`, `brew list --cask --versions`, `brew tap`
-	return &snapshot.ToolState{Name: h.Name()}, nil
+func (h *HomebrewCollector) Collect(manifest *snapshot.ToolsManifest, _ storage.BlobStore) error {
+	// TODO: run `brew --version` to get version
+	// TODO: run `brew list --formula --versions` and `brew list --cask --versions`
+	// TODO: run `brew tap` to get taps
+	// TODO: run `brew list --pinned` to detect pinned formulae
+	manifest.Homebrew = &snapshot.HomebrewState{
+		Packages: []snapshot.HomebrewPackage{},
+		Taps:     []string{},
+	}
+	return nil
 }

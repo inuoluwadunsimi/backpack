@@ -29,8 +29,8 @@ func NewInitCmd() *cobra.Command {
 				return fmt.Errorf("loading config: %w", err)
 			}
 
-			if cfg.DeviceID != "" {
-				return fmt.Errorf("backpack is already initialized on this device (ID: %s)", cfg.DeviceID)
+			if cfg.Device.ID != "" {
+				return fmt.Errorf("backpack is already initialized on this device (ID: %s)", cfg.Device.ID)
 			}
 
 			// Resolve device name
@@ -51,7 +51,7 @@ func NewInitCmd() *cobra.Command {
 			}
 
 			// Initialize storage backend
-			backend, err := storage.NewLocalBackend(cfg.Storage.LocalPath)
+			backend, err := storage.NewLocalBackend(cfg.LocalPath())
 			if err != nil {
 				return fmt.Errorf("initializing storage: %w", err)
 			}
@@ -62,8 +62,11 @@ func NewInitCmd() *cobra.Command {
 			}
 
 			// Update config
-			cfg.DeviceID = device.ID
-			cfg.DeviceName = device.Name
+			cfg.Device = config.DeviceConfig{
+				ID:           device.ID,
+				Name:         device.Name,
+				RegisteredAt: time.Now(),
+			}
 			if err := config.Save(cfg); err != nil {
 				return fmt.Errorf("saving config: %w", err)
 			}

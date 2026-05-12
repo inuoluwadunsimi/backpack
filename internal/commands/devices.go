@@ -20,7 +20,7 @@ func NewDevicesCmd() *cobra.Command {
 				return fmt.Errorf("loading config: %w", err)
 			}
 
-			backend, err := storage.NewLocalBackend(cfg.Storage.LocalPath)
+			backend, err := storage.NewLocalBackend(cfg.LocalPath())
 			if err != nil {
 				return fmt.Errorf("initializing storage: %w", err)
 			}
@@ -38,7 +38,7 @@ func NewDevicesCmd() *cobra.Command {
 			fmt.Printf("Registered devices (%d):\n\n", len(devices))
 			for _, d := range devices {
 				current := ""
-				if d.ID == cfg.DeviceID {
+				if d.ID == cfg.Device.ID {
 					current = " ← this machine"
 				}
 				fmt.Printf("  %s  %s%s\n", d.ID[:8], d.Name, current)

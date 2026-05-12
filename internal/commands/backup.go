@@ -2,6 +2,7 @@ package commands
 
 import (
 	"fmt"
+	"runtime"
 	"time"
 
 	"github.com/google/uuid"
@@ -26,28 +27,33 @@ func NewBackupCmd() *cobra.Command {
 				return fmt.Errorf("loading config: %w", err)
 			}
 
-			if cfg.DeviceID == "" {
+			if cfg.Device.ID == "" {
 				return fmt.Errorf("backpack not initialized — run `backpack init` first")
 			}
 
-			backend, err := storage.NewLocalBackend(cfg.Storage.LocalPath)
+			backend, err := storage.NewLocalBackend(cfg.LocalPath())
 			if err != nil {
 				return fmt.Errorf("initializing storage: %w", err)
 			}
 
-			// Collect state from all available tools
+			// Build snapshot shell
 			snap := &snapshot.Snapshot{
-				ID:        uuid.New().String(),
-				DeviceID:  cfg.DeviceID,
-				Timestamp: time.Now(),
-				Tools:     make(map[string]snapshot.ToolState),
-				Meta: snapshot.SnapshotMeta{
-					Trigger: "manual",
-					Notes:   note,
-					Version: "0.1.0", // TODO: inject at build time
+				SchemaVersion: 1,
+				ID:            uuid.New().String(),
+				CapturedAt:    time.Now(),
+				Trigger:       "manual",
+				Notes:         note,
+				Device: snapshot.SnapshotDevice{
+					ID:   cfg.Device.ID,
+					Name: cfg.Device.Name,
+					OS:   runtime.GOOS,
+					Arch: runtime.GOARCH,
+					// TODO: populate OSVersion from sw_vers
 				},
+				Tools: snapshot.ToolsManifest{},
 			}
 
+			// Collect state from all available collectors
 			for _, c := range collectors.Registry() {
 				if !c.IsAvailable() {
 					fmt.Printf("  ⏭  %s — not installed, skipping\n", c.Name())
@@ -55,12 +61,10 @@ func NewBackupCmd() *cobra.Command {
 				}
 
 				fmt.Printf("  📦 Collecting %s...\n", c.Name())
-				state, err := c.Collect()
-				if err != nil {
+				if err := c.Collect(&snap.Tools, backend.Blobs()); err != nil {
 					fmt.Printf("  ⚠  %s — error: %v\n", c.Name(), err)
 					continue
 				}
-				snap.Tools[c.Name()] = *state
 			}
 
 			if err := backend.SaveSnapshot(snap); err != nil {
@@ -68,7 +72,6 @@ func NewBackupCmd() *cobra.Command {
 			}
 
 			fmt.Printf("\n✓ Snapshot saved: %s\n", snap.ID[:8])
-			fmt.Printf("  Tools captured: %d\n", len(snap.Tools))
 
 			return nil
 		},

@@ -28,7 +28,7 @@ func NewRestoreCmd() *cobra.Command {
 				return fmt.Errorf("loading config: %w", err)
 			}
 
-			backend, err := storage.NewLocalBackend(cfg.Storage.LocalPath)
+			backend, err := storage.NewLocalBackend(cfg.LocalPath())
 			if err != nil {
 				return fmt.Errorf("initializing storage: %w", err)
 			}
@@ -63,8 +63,8 @@ func NewRestoreCmd() *cobra.Command {
 
 				fmt.Println("Available snapshots:")
 				for _, s := range snapshots {
-					fmt.Printf("  • %s — %s (%d tools)\n",
-						s.ID[:8], s.Timestamp.Format("2006-01-02 15:04"), len(s.Tools))
+					fmt.Printf("  • %s — %s\n",
+						s.ID[:8], s.CapturedAt.Format("2006-01-02 15:04"))
 				}
 				fmt.Println("\nUse --snapshot <id> to select a snapshot")
 				return nil

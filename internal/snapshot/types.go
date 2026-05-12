@@ -2,21 +2,36 @@ package snapshot
 
 import "time"
 
+// ──────────────────────────────────────────────
+// Snapshot — top-level
+// ──────────────────────────────────────────────
+
 // Snapshot represents a full point-in-time capture of a device's dev environment.
 type Snapshot struct {
-	ID        string            `json:"id"`
-	DeviceID  string            `json:"device_id"`
-	Timestamp time.Time         `json:"timestamp"`
-	Tools     map[string]ToolState `json:"tools"` // keyed by collector name (e.g. "homebrew", "npm")
-	Meta      SnapshotMeta      `json:"meta"`
+	SchemaVersion int            `json:"schema_version"`
+	ID            string         `json:"id"`
+	CapturedAt    time.Time      `json:"captured_at"`
+	Trigger       string         `json:"trigger"`             // "manual", "auto", "init"
+	ParentID      string         `json:"parent_id,omitempty"` // previous snapshot ID
+	Notes         string         `json:"notes,omitempty"`
+	Tags          []string       `json:"tags,omitempty"`
+	Device        SnapshotDevice `json:"device"`
+	Tools         ToolsManifest  `json:"tools"`
 }
 
-// SnapshotMeta holds metadata about how/why this snapshot was taken.
-type SnapshotMeta struct {
-	Trigger   string `json:"trigger"`   // "manual", "auto", "init"
-	Notes     string `json:"notes"`     // optional user-supplied notes
-	Version   string `json:"version"`   // backpack version that created this snapshot
+// SnapshotDevice is the device context embedded in each snapshot.
+// Denormalized from config so snapshots are self-contained.
+type SnapshotDevice struct {
+	ID        string `json:"id"`
+	Name      string `json:"name"`
+	OS        string `json:"os"`
+	Arch      string `json:"arch"`
+	OSVersion string `json:"os_version"`
 }
+
+// ──────────────────────────────────────────────
+// Device (persisted separately in device.json)
+// ──────────────────────────────────────────────
 
 // Device represents a registered machine.
 type Device struct {
@@ -29,35 +44,139 @@ type Device struct {
 	LastSeen time.Time `json:"last_seen"`
 }
 
-// ToolState captures the state of a single tool/package manager.
-type ToolState struct {
-	Name     string    `json:"name"`
-	Version  string    `json:"version,omitempty"`  // version of the tool itself (e.g. brew 4.x)
-	Packages []Package `json:"packages"`
-	Configs  []Config  `json:"configs,omitempty"`  // relevant config files
+// ──────────────────────────────────────────────
+// Tools Manifest — typed per-tool
+// ──────────────────────────────────────────────
+
+// ToolsManifest holds every tool's state as a typed field.
+// Nil pointer = tool was not collected (unavailable or disabled).
+type ToolsManifest struct {
+	Homebrew    *HomebrewState    `json:"homebrew,omitempty"`
+	Node        *RuntimeState     `json:"node,omitempty"`
+	NpmGlobals  []PackageEntry    `json:"npm_globals,omitempty"`
+	Python      *RuntimeState     `json:"python,omitempty"`
+	PipPackages []PackageEntry    `json:"pip_packages,omitempty"`
+	VSCode      *VSCodeState      `json:"vscode,omitempty"`
+	Shell       *ShellState       `json:"shell,omitempty"`
+	Git         *GitConfigState   `json:"git,omitempty"`
+	SSH         *SSHState         `json:"ssh,omitempty"`
+	SystemTools []SystemToolEntry `json:"system_tools,omitempty"`
 }
 
-// Package represents an individual installed package/formula/extension.
-type Package struct {
+// ──────────────────────────────────────────────
+// Homebrew
+// ──────────────────────────────────────────────
+
+// HomebrewState captures Homebrew formulae, casks, and taps.
+type HomebrewState struct {
+	Version  string            `json:"version"`
+	Packages []HomebrewPackage `json:"packages"`
+	Taps     []string          `json:"taps"`
+}
+
+// HomebrewPackage represents a formula or cask.
+type HomebrewPackage struct {
+	Name    string `json:"name"`
+	Version string `json:"version"`
+	Type    string `json:"type"`             // "formula" or "cask"
+	Pinned  bool   `json:"pinned,omitempty"` // only relevant for formulae
+}
+
+// ──────────────────────────────────────────────
+// Language Runtimes (Node, Python, etc.)
+// ──────────────────────────────────────────────
+
+// RuntimeState captures a language runtime's version and how it's managed.
+type RuntimeState struct {
+	Version string `json:"version"`
+	Manager string `json:"manager,omitempty"` // "nvm", "pyenv", "system", etc.
+}
+
+// PackageEntry is a globally-installed package (npm -g, pip).
+type PackageEntry struct {
 	Name    string `json:"name"`
 	Version string `json:"version,omitempty"`
-	Source  string `json:"source,omitempty"` // e.g. "tap/formula" for brew, registry URL for npm
-	Global  bool   `json:"global,omitempty"` // for npm/pip: globally installed
 }
 
-// Config represents a dotfile or config file associated with a tool.
-type Config struct {
-	Path    string `json:"path"`     // original path on disk (e.g. ~/.zshrc)
-	Content string `json:"content"`  // base64-encoded file content
-	Hash    string `json:"hash"`     // SHA-256 of raw content for diffing
+// ──────────────────────────────────────────────
+// VS Code
+// ──────────────────────────────────────────────
+
+// VSCodeState captures VS Code version and installed extensions.
+type VSCodeState struct {
+	Version    string            `json:"version"`
+	Extensions []VSCodeExtension `json:"extensions"`
 }
 
-// DiffResult represents the difference between two snapshots or a snapshot and the current state.
+// VSCodeExtension represents an installed VS Code extension.
+type VSCodeExtension struct {
+	ID      string `json:"id"`      // publisher.name format
+	Version string `json:"version"`
+}
+
+// ──────────────────────────────────────────────
+// Shell
+// ──────────────────────────────────────────────
+
+// ShellState captures the user's shell configuration.
+type ShellState struct {
+	Type        string             `json:"type"`                    // "zsh", "bash", "fish"
+	ConfigFiles map[string]FileRef `json:"config_files,omitempty"` // filename → blob reference
+	Aliases     []string           `json:"aliases,omitempty"`       // raw alias lines
+}
+
+// FileRef references a config file whose content is stored in the blob store.
+type FileRef struct {
+	Hash string `json:"hash"`           // SHA-256 of raw content
+	Size int64  `json:"size"`           // raw file size in bytes
+	Path string `json:"path"`           // original absolute path on disk
+	Mode string `json:"mode,omitempty"` // file permission bits, e.g. "0644"
+}
+
+// ──────────────────────────────────────────────
+// Git Config
+// ──────────────────────────────────────────────
+
+// GitConfigState captures the user's git configuration.
+type GitConfigState struct {
+	Name    string            `json:"name"`
+	Email   string            `json:"email"`
+	Editor  string            `json:"editor,omitempty"`
+	Aliases map[string]string `json:"aliases,omitempty"` // alias → expansion
+}
+
+// ──────────────────────────────────────────────
+// SSH
+// ──────────────────────────────────────────────
+
+// SSHState captures SSH key presence (public keys only) and config existence.
+type SSHState struct {
+	KeyFiles  []string `json:"key_files"`  // public key filenames only
+	HasConfig bool     `json:"has_config"` // true if ~/.ssh/config exists
+}
+
+// ──────────────────────────────────────────────
+// System Tools (go, rustc, java, etc.)
+// ──────────────────────────────────────────────
+
+// SystemToolEntry represents a standalone CLI tool installed on the system.
+type SystemToolEntry struct {
+	Name    string `json:"name"`
+	Version string `json:"version"`
+	Path    string `json:"path"` // resolved binary path
+}
+
+// ──────────────────────────────────────────────
+// Diff Types
+// ──────────────────────────────────────────────
+
+// DiffResult represents the difference between two snapshots for one tool.
 type DiffResult struct {
-	Tool     string    `json:"tool"`
-	Added    []Package `json:"added,omitempty"`
-	Removed  []Package `json:"removed,omitempty"`
-	Changed  []PackageDiff `json:"changed,omitempty"`
+	Tool          string        `json:"tool"`
+	Added         []PackageEntry `json:"added,omitempty"`
+	Removed       []PackageEntry `json:"removed,omitempty"`
+	Changed       []PackageDiff  `json:"changed,omitempty"`
+	ConfigChanges []ConfigDiff   `json:"config_changes,omitempty"`
 }
 
 // PackageDiff captures a version change for a single package.
@@ -65,4 +184,12 @@ type PackageDiff struct {
 	Name       string `json:"name"`
 	OldVersion string `json:"old_version"`
 	NewVersion string `json:"new_version"`
+}
+
+// ConfigDiff tracks changes to a config file between snapshots.
+type ConfigDiff struct {
+	Path    string `json:"path"`
+	OldHash string `json:"old_hash,omitempty"`
+	NewHash string `json:"new_hash,omitempty"`
+	Status  string `json:"status"` // "added", "removed", "modified"
 }

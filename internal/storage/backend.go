@@ -26,4 +26,7 @@ type Backend interface {
 
 	// GetDevice retrieves a device by ID.
 	GetDevice(id string) (*snapshot.Device, error)
+
+	// Blobs returns the blob store for config file content.
+	Blobs() BlobStore
 }

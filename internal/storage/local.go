@@ -12,14 +12,26 @@ import (
 
 // LocalBackend stores snapshots as JSON files on the local filesystem.
 type LocalBackend struct {
-	BasePath string // e.g. ~/.backpack/snapshots
+	BasePath  string // e.g. ~/.backpack/snapshots
+	blobStore *LocalBlobStore
 }
 
 func NewLocalBackend(basePath string) (*LocalBackend, error) {
 	if err := os.MkdirAll(basePath, 0o755); err != nil {
 		return nil, fmt.Errorf("creating storage directory: %w", err)
 	}
-	return &LocalBackend{BasePath: basePath}, nil
+
+	blobDir := filepath.Join(basePath, "blobs")
+	bs, err := NewLocalBlobStore(blobDir)
+	if err != nil {
+		return nil, fmt.Errorf("creating blob store: %w", err)
+	}
+
+	return &LocalBackend{BasePath: basePath, blobStore: bs}, nil
+}
+
+func (l *LocalBackend) Blobs() BlobStore {
+	return l.blobStore
 }
 
 func (l *LocalBackend) snapshotDir(deviceID string) string {
@@ -31,7 +43,7 @@ func (l *LocalBackend) deviceDir() string {
 }
 
 func (l *LocalBackend) SaveSnapshot(snap *snapshot.Snapshot) error {
-	dir := l.snapshotDir(snap.DeviceID)
+	dir := l.snapshotDir(snap.Device.ID)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
@@ -46,8 +58,34 @@ func (l *LocalBackend) SaveSnapshot(snap *snapshot.Snapshot) error {
 }
 
 func (l *LocalBackend) LoadSnapshot(id string) (*snapshot.Snapshot, error) {
-	// TODO: search across all device directories for the snapshot ID
-	return nil, fmt.Errorf("LoadSnapshot not yet implemented")
+	// Search across all device directories for the snapshot ID
+	devDir := l.deviceDir()
+	entries, err := os.ReadDir(devDir)
+	if err != nil {
+		return nil, fmt.Errorf("reading devices directory: %w", err)
+	}
+
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		path := filepath.Join(l.snapshotDir(entry.Name()), id+".json")
+		data, err := os.ReadFile(path)
+		if os.IsNotExist(err) {
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+
+		var snap snapshot.Snapshot
+		if err := json.Unmarshal(data, &snap); err != nil {
+			return nil, err
+		}
+		return &snap, nil
+	}
+
+	return nil, fmt.Errorf("snapshot %s not found", id)
 }
 
 func (l *LocalBackend) ListSnapshots(deviceID string) ([]snapshot.Snapshot, error) {
@@ -78,15 +116,31 @@ func (l *LocalBackend) ListSnapshots(deviceID string) ([]snapshot.Snapshot, erro
 
 	// Sort newest first
 	sort.Slice(snapshots, func(i, j int) bool {
-		return snapshots[i].Timestamp.After(snapshots[j].Timestamp)
+		return snapshots[i].CapturedAt.After(snapshots[j].CapturedAt)
 	})
 
 	return snapshots, nil
 }
 
 func (l *LocalBackend) DeleteSnapshot(id string) error {
-	// TODO: find and delete the snapshot file
-	return fmt.Errorf("DeleteSnapshot not yet implemented")
+	// Search across all device directories for the snapshot ID
+	devDir := l.deviceDir()
+	entries, err := os.ReadDir(devDir)
+	if err != nil {
+		return fmt.Errorf("reading devices directory: %w", err)
+	}
+
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		path := filepath.Join(l.snapshotDir(entry.Name()), id+".json")
+		if _, statErr := os.Stat(path); statErr == nil {
+			return os.Remove(path)
+		}
+	}
+
+	return fmt.Errorf("snapshot %s not found", id)
 }
 
 func (l *LocalBackend) SaveDevice(device *snapshot.Device) error {

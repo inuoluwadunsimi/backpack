@@ -5,8 +5,14 @@ import "github.com/inuoluwadunsimi/backpack/internal/snapshot"
 // GitBackend stores snapshots in a git repository, enabling version history
 // and remote sync (push/pull).
 type GitBackend struct {
-	RepoPath string
-	Branch   string
+	RepoPath   string
+	Branch     string
+	SSHKeyPath string
+	blobStore  *LocalBlobStore
+}
+
+func (g *GitBackend) Blobs() BlobStore {
+	return g.blobStore
 }
 
 func (g *GitBackend) SaveSnapshot(snap *snapshot.Snapshot) error {

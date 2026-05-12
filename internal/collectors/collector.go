@@ -2,7 +2,10 @@
 // discovering installed dev tools and capturing their state.
 package collectors
 
-import "github.com/inuoluwadunsimi/backpack/internal/snapshot"
+import (
+	"github.com/inuoluwadunsimi/backpack/internal/snapshot"
+	"github.com/inuoluwadunsimi/backpack/internal/storage"
+)
 
 // Collector captures the current state of a single tool/package manager.
 type Collector interface {
@@ -12,8 +15,10 @@ type Collector interface {
 	// IsAvailable returns true if the tool is installed on this machine.
 	IsAvailable() bool
 
-	// Collect gathers the current state of the tool.
-	Collect() (*snapshot.ToolState, error)
+	// Collect gathers the current state and populates the relevant field(s)
+	// on the ToolsManifest. The BlobStore is provided for storing config
+	// file contents by hash.
+	Collect(manifest *snapshot.ToolsManifest, blobs storage.BlobStore) error
 }
 
 // Registry returns all known collectors. During restore the order matters

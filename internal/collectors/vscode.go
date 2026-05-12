@@ -1,6 +1,9 @@
 package collectors
 
-import "github.com/inuoluwadunsimi/backpack/internal/snapshot"
+import (
+	"github.com/inuoluwadunsimi/backpack/internal/snapshot"
+	"github.com/inuoluwadunsimi/backpack/internal/storage"
+)
 
 // VSCodeCollector captures VS Code extensions and settings.
 type VSCodeCollector struct{}
@@ -12,8 +15,12 @@ func (v *VSCodeCollector) IsAvailable() bool {
 	return false
 }
 
-func (v *VSCodeCollector) Collect() (*snapshot.ToolState, error) {
+func (v *VSCodeCollector) Collect(manifest *snapshot.ToolsManifest, _ storage.BlobStore) error {
+	// TODO: run `code --version` to get VS Code version
 	// TODO: run `code --list-extensions --show-versions`
-	// TODO: optionally capture settings.json and keybindings.json
-	return &snapshot.ToolState{Name: v.Name()}, nil
+	// TODO: optionally capture settings.json and keybindings.json via blobs
+	manifest.VSCode = &snapshot.VSCodeState{
+		Extensions: []snapshot.VSCodeExtension{},
+	}
+	return nil
 }
